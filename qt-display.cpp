@@ -101,9 +101,7 @@ OBSQTDisplay::OBSQTDisplay(QWidget *parent, Qt::WindowFlags flags) : QWidget(par
 
 	auto windowVisible = [this](bool visible) {
 		if (!visible) {
-#if !defined(_WIN32) && !defined(__APPLE__)
-			display = nullptr;
-#endif
+			DestroyDisplay();
 			return;
 		}
 
