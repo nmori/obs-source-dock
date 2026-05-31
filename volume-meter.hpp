@@ -2,6 +2,8 @@
 
 #include <QWidget>
 #include <QPaintEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QSharedPointer>
 #include <QTimer>
 #include <QMutex>

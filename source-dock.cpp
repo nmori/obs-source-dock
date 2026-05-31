@@ -1,9 +1,20 @@
 #include "source-dock.hpp"
 #include <obs-module.h>
+#include <cmath>
+#include <cstring>
+#include <map>
+#include <utility>
+#include <QAbstractButton>
+#include <QColorDialog>
+#include <QCursor>
+#include <QFont>
+#include <QFontDialog>
+#include <QGridLayout>
 #include <QGuiApplication>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QWidgetAction>
 #include <QWindow>
@@ -11,9 +22,10 @@
 #include <QVBoxLayout>
 #include <QScrollArea>
 #include <QSplitter>
-#include <QFont>
-#include <QFontDialog>
-#include <QColorDialog>
+#include <QFocusEvent>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 
 #include "media-control.hpp"
 #include "source-dock-settings.hpp"

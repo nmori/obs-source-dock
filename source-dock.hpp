@@ -1,8 +1,14 @@
 #pragma once
 
+#include <functional>
+#include <list>
 #include <qboxlayout.h>
 #include <QCheckBox>
 #include <QDockWidget>
+#include <QFocusEvent>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QWheelEvent>
 #include <QSlider>
 #include <QPlainTextEdit>
 #include <QScrollArea>
@@ -16,6 +22,13 @@
 #include "obs.hpp"
 #include "qt-display.hpp"
 #include "volume-meter.hpp"
+
+class QAction;
+class QFrame;
+class QLabel;
+class QMainWindow;
+class QPushButton;
+class QTimer;
 
 #define SHOW_PREVIEW 1
 #define SHOW_AUDIO 2

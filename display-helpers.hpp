@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <QSize>
+#include <QWidget>
 #include <graphics/vec4.h>
 #include <graphics/matrix4.h>
 

@@ -2,6 +2,7 @@
 
 #include <QSlider>
 #include <QMouseEvent>
+#include <QWheelEvent>
 
 class MediaSlider : public QSlider {
 	Q_OBJECT

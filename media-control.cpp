@@ -1,5 +1,6 @@
 #include "media-control.hpp"
 #include <obs-module.h>
+#include <QCursor>
 #include <QToolTip>
 #include <QMainWindow>
 #include <QVBoxLayout>

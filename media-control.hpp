@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QTimer>
+#include <QString>
 #include <obs.hpp>
 #include <qicon.h>
 #include <QLabel>
