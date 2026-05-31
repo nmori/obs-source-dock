@@ -368,7 +368,11 @@ void SourceDockSettingsDialog::RefreshTable()
 				continue;
 		}
 		auto col = 0;
-		auto *label = new QLabel(QString::fromUtf8(obs_source_get_name(it->GetSource())));
+		const char *source_name = nullptr;
+		if (!it->GetSelected() && it->GetSource())
+			source_name = obs_source_get_name(it->GetSource());
+		auto *label = new QLabel(source_name ? QString::fromUtf8(source_name)
+							 : QT_UTF8(obs_module_text("CurrentSelectedSource")));
 		mainLayout->addWidget(label, row, col++);
 
 		label = new QLabel(t);
@@ -595,7 +599,7 @@ void SourceDockSettingsDialog::mouseDoubleClickEvent(QMouseEvent *event)
 	if (sourceName.isEmpty())
 		return;
 
-	item = mainLayout->itemAtPosition(row, 0);
+	item = mainLayout->itemAtPosition(row, 1);
 	if (!item)
 		return;
 	label = dynamic_cast<QLabel *>(item->widget());

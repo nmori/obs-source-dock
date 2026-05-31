@@ -23,6 +23,7 @@
 #include <QScrollArea>
 #include <QSplitter>
 #include <QFocusEvent>
+#include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -320,6 +321,7 @@ void set_previous_scene_empty(void *p, calldata_t *calldata)
 		signal_handler_disconnect(sh, "remove", set_previous_scene_empty, nullptr);
 		signal_handler_disconnect(sh, "destroy", set_previous_scene_empty, nullptr);
 	}
+	obs_source_release(previous_scene);
 	previous_scene = nullptr;
 }
 
@@ -466,8 +468,9 @@ static void frontend_event(enum obs_frontend_event event, void *)
 				signal_handler_connect(sh, "item_select", item_select, nullptr);
 				signal_handler_connect(sh, "remove", set_previous_scene_empty, nullptr);
 				signal_handler_connect(sh, "destroy", set_previous_scene_empty, nullptr);
+			} else {
+				obs_source_release(preview);
 			}
-			obs_source_release(preview);
 		} else {
 			auto scene = obs_frontend_get_current_scene();
 			if (scene) {
@@ -477,8 +480,9 @@ static void frontend_event(enum obs_frontend_event event, void *)
 					signal_handler_connect(sh, "item_select", item_select, nullptr);
 					signal_handler_connect(sh, "remove", set_previous_scene_empty, nullptr);
 					signal_handler_connect(sh, "destroy", set_previous_scene_empty, nullptr);
+				} else {
+					obs_source_release(scene);
 				}
-				obs_source_release(scene);
 			}
 		}
 		update_selected_source();
@@ -956,6 +960,8 @@ OBSEventFilter *SourceDock::BuildEventFilter()
 		case QEvent::KeyPress:
 		case QEvent::KeyRelease:
 			return this->HandleKeyEvent(static_cast<QKeyEvent *>(event));
+		case QEvent::InputMethod:
+			return this->HandleInputMethodEvent(static_cast<QInputMethodEvent *>(event));
 		default:
 			return false;
 		}
@@ -1294,6 +1300,8 @@ bool SourceDock::HandleMouseWheelEvent(QWheelEvent *event)
 bool SourceDock::HandleFocusEvent(QFocusEvent *event)
 {
 	bool focus = event->type() == QEvent::FocusIn;
+	if (!focus)
+		ime_composing = false;
 
 	if (source)
 		obs_source_send_focus(source, focus);
@@ -1318,6 +1326,7 @@ bool SourceDock::HandleKeyEvent(QKeyEvent *event)
 {
 	if (!source)
 		return true;
+
 	struct obs_key_event keyEvent;
 
 	QByteArray text = event->text().toUtf8();
@@ -1330,7 +1339,7 @@ bool SourceDock::HandleKeyEvent(QKeyEvent *event)
 	bool keyUp = event->type() == QEvent::KeyRelease;
 
 	obs_source_send_key_click(source, &keyEvent, keyUp);
-	if (!switch_scene_enabled) {
+	if (!switch_scene_enabled && !ime_composing) {
 		if (obs_scene_t *scene = obs_scene_from_source(source)) {
 			key_event ce{keyEvent, keyUp};
 			obs_scene_enum_items(scene, HandleSceneKeyEvent, &ce);
@@ -1338,6 +1347,50 @@ bool SourceDock::HandleKeyEvent(QKeyEvent *event)
 	}
 
 	return true;
+}
+
+bool SourceDock::HandleInputMethodEvent(QInputMethodEvent *event)
+{
+	if (!source || !event)
+		return false;
+
+	const QString preedit = event->preeditString();
+	ime_composing = !preedit.isEmpty();
+
+	const QString committed = event->commitString();
+	if (committed.isEmpty())
+		return false;
+
+	const auto codepoints = committed.toUcs4();
+	for (char32_t cp : codepoints) {
+		QString ch = QString::fromUcs4(&cp, 1);
+		QByteArray text = ch.toUtf8();
+		if (text.isEmpty())
+			continue;
+
+		obs_key_event keyEvent = {};
+		keyEvent.modifiers = INTERACT_NONE;
+		keyEvent.text = text.data();
+		keyEvent.native_modifiers = 0;
+		keyEvent.native_scancode = 0;
+		keyEvent.native_vkey = 0;
+
+		obs_source_send_key_click(source, &keyEvent, false);
+		obs_source_send_key_click(source, &keyEvent, true);
+
+		if (!switch_scene_enabled) {
+			if (obs_scene_t *scene = obs_scene_from_source(source)) {
+				key_event ce{keyEvent, false};
+				obs_scene_enum_items(scene, HandleSceneKeyEvent, &ce);
+				ce.keyUp = true;
+				obs_scene_enum_items(scene, HandleSceneKeyEvent, &ce);
+			}
+		}
+	}
+
+	ime_composing = false;
+	event->ignore();
+	return false;
 }
 
 void SourceDock::EnablePreview()
@@ -1385,6 +1438,7 @@ void SourceDock::EnablePreview()
 
 	preview->setMouseTracking(true);
 	preview->setFocusPolicy(Qt::StrongFocus);
+	preview->setAttribute(Qt::WA_InputMethodEnabled, true);
 	preview->installEventFilter(eventFilter.get());
 
 	auto addDrawCallback = [this]() {

@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QDockWidget>
 #include <QFocusEvent>
+#include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
@@ -111,6 +112,7 @@ private:
 	bool showTimeRemaining = true;
 	QWidget *volControl = nullptr;
 	bool switch_scene_enabled = false;
+	bool ime_composing = false;
 	QFrame *activeFrame = nullptr;
 	QLabel *activeLabel = nullptr;
 	QWidget *sceneItems = nullptr;
@@ -143,6 +145,7 @@ private:
 	bool HandleMouseWheelEvent(QWheelEvent *event);
 	bool HandleFocusEvent(QFocusEvent *event);
 	bool HandleKeyEvent(QKeyEvent *event);
+	bool HandleInputMethodEvent(QInputMethodEvent *event);
 
 	OBSEventFilter *BuildEventFilter();
 
