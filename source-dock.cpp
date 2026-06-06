@@ -2,8 +2,10 @@
 #include <obs-module.h>
 #include <cmath>
 #include <cstring>
+#include <atomic>
 #include <map>
 #include <utility>
+#include <vector>
 #include <QAbstractButton>
 #include <QColorDialog>
 #include <QCursor>
@@ -54,6 +56,25 @@ OBS_MODULE_AUTHOR("Exeldro");
 OBS_MODULE_USE_DEFAULT_LOCALE("source-dock", "en-US")
 
 QMainWindow *GetSourceWindowByTitle(const QString window_name);
+static void source_remove(void *data, calldata_t *call_data);
+static std::atomic_bool source_dock_shutting_down{false};
+
+static void cleanup_source_docks_ui(void *)
+{
+	std::vector<QByteArray> dock_ids;
+	dock_ids.reserve(source_docks.size());
+	for (const auto &it : source_docks)
+		dock_ids.push_back(it->objectName().toUtf8());
+	source_docks.clear();
+	for (const auto &dock_id : dock_ids)
+		obs_frontend_remove_dock(dock_id.constData());
+
+	for (const auto &it : source_windows) {
+		it->close();
+		delete (it);
+	}
+	source_windows.clear();
+}
 
 static void frontend_save_load(obs_data_t *save_data, bool saving, void *)
 {
@@ -445,16 +466,14 @@ void update_active(void *param)
 static void frontend_event(enum obs_frontend_event event, void *)
 {
 	if (event == OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP || event == OBS_FRONTEND_EVENT_EXIT) {
+		source_dock_shutting_down.store(true);
+		signal_handler_disconnect(obs_get_signal_handler(), "source_remove", source_remove, nullptr);
 		set_previous_scene_empty(nullptr, nullptr);
-		for (const auto &it : source_docks) {
-			obs_frontend_remove_dock(it->objectName().toUtf8().constData());
+		if (obs_in_task_thread(OBS_TASK_UI)) {
+			cleanup_source_docks_ui(nullptr);
+		} else {
+			obs_queue_task(OBS_TASK_UI, cleanup_source_docks_ui, nullptr, true);
 		}
-		source_docks.clear();
-		for (const auto &it : source_windows) {
-			it->close();
-			delete (it);
-		}
-		source_windows.clear();
 	} else if (event == OBS_FRONTEND_EVENT_SCENE_CHANGED || event == OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED ||
 		   event == OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED || event == OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED) {
 		if (previous_scene) {
@@ -502,6 +521,8 @@ static void frontend_event(enum obs_frontend_event event, void *)
 static void source_remove(void *data, calldata_t *call_data)
 {
 	UNUSED_PARAMETER(data);
+	if (source_dock_shutting_down.load())
+		return;
 	obs_source_t *source = static_cast<obs_source_t *>(calldata_ptr(call_data, "source"));
 	for (auto it = source_docks.begin(); it != source_docks.end();) {
 		if ((*it)->GetSource().Get() == source) {
@@ -516,6 +537,7 @@ static void source_remove(void *data, calldata_t *call_data)
 bool obs_module_load()
 {
 	blog(LOG_INFO, "[Source Dock] loaded version %s", PROJECT_VERSION);
+	source_dock_shutting_down.store(false);
 
 	obs_frontend_add_save_callback(frontend_save_load, nullptr);
 	obs_frontend_add_event_callback(frontend_event, nullptr);
@@ -538,6 +560,7 @@ bool obs_module_load()
 
 void obs_module_unload()
 {
+	source_dock_shutting_down.store(true);
 	obs_frontend_remove_save_callback(frontend_save_load, nullptr);
 	obs_frontend_remove_event_callback(frontend_event, nullptr);
 	signal_handler_disconnect(obs_get_signal_handler(), "source_remove", source_remove, nullptr);
@@ -2021,7 +2044,8 @@ void SourceDock::EnableTextInput()
 {
 	if (textInput) {
 		textInput->setVisible(true);
-		textInputTimer->start(1000);
+		if (textInputTimer)
+			textInputTimer->start(1000);
 		return;
 	}
 
@@ -2142,24 +2166,32 @@ void SourceDock::EnableTextInput()
 	};
 	connect(textInput, &QPlainTextEdit::textChanged, changeText);
 
-	textInputTimer = new QTimer(this);
-	connect(textInputTimer, &QTimer::timeout, this, [=]() {
-		if (auto *settings = source ? obs_source_get_settings(source) : nullptr) {
-			const auto text = QT_UTF8(obs_data_get_string(settings, "text"));
-			if (textInput->toPlainText() != text) {
-				textInput->setPlainText(text);
+	if (!textInputTimer) {
+		textInputTimer = new QTimer(this);
+		connect(textInputTimer, &QTimer::timeout, this, [this]() {
+			if (!textInput)
+				return;
+			if (auto *settings = source ? obs_source_get_settings(source) : nullptr) {
+				const auto text = QT_UTF8(obs_data_get_string(settings, "text"));
+				if (textInput->toPlainText() != text) {
+					textInput->setPlainText(text);
+				}
+				obs_data_release(settings);
 			}
-			obs_data_release(settings);
-		}
-	});
+		});
+	}
 	textInputTimer->start(1000);
+
+	if (strncmp(obs_source_get_id(source), "text_", 5) == 0)
+		textInput->setFocus();
 }
 
 void SourceDock::DisableTextInput()
 {
 	if (!textInput)
 		return;
-	textInputTimer->stop();
+	if (textInputTimer)
+		textInputTimer->stop();
 
 	textInput->setVisible(false);
 	textInput = nullptr;

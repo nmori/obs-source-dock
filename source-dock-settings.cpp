@@ -354,7 +354,12 @@ void SourceDockSettingsDialog::RefreshTable()
 	const auto title = titleEdit->text();
 	const auto window = windowEdit->text();
 	for (const auto &it : source_docks) {
-		if (!sourceName.isEmpty() && !it->objectName().contains(sourceName, Qt::CaseInsensitive))
+		const char *source_name = nullptr;
+		if (!it->GetSelected() && it->GetSource())
+			source_name = obs_source_get_name(it->GetSource());
+		QString sourceLabel = source_name ? QString::fromUtf8(source_name)
+						 : QT_UTF8(obs_module_text("CurrentSelectedSource"));
+		if (!sourceName.isEmpty() && !sourceLabel.contains(sourceName, Qt::CaseInsensitive))
 			continue;
 		QString t = it->windowTitle();
 		if (!title.isEmpty() && !t.contains(title, Qt::CaseInsensitive))
@@ -368,11 +373,7 @@ void SourceDockSettingsDialog::RefreshTable()
 				continue;
 		}
 		auto col = 0;
-		const char *source_name = nullptr;
-		if (!it->GetSelected() && it->GetSource())
-			source_name = obs_source_get_name(it->GetSource());
-		auto *label = new QLabel(source_name ? QString::fromUtf8(source_name)
-							 : QT_UTF8(obs_module_text("CurrentSelectedSource")));
+		auto *label = new QLabel(sourceLabel);
 		mainLayout->addWidget(label, row, col++);
 
 		label = new QLabel(t);
